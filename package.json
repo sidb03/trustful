@@ -1,0 +1,61 @@
+{
+  "name": "@sidb03/trustful",
+  "version": "0.0.2",
+  "description": "A Decentralized PKI",
+  "main": "src/cli.js",
+  "bin": {
+    "@sidb03/trustful": "bin/trustful",
+    "trustful": "bin/trustful"
+  },
+  "scripts": {
+    "start": "nodemon server.js",
+    "test": "truffle test test/*"
+  },
+  "author": "Siddharth Barpanda",
+  "license": "MIT",
+  "devDependencies": {
+    "babel-cli": "^6.22.2",
+    "babel-core": "^6.22.1",
+    "babel-eslint": "^6.1.2",
+    "babel-loader": "^6.2.10",
+    "babel-plugin-transform-runtime": "^6.22.0",
+    "babel-preset-env": "^1.1.8",
+    "babel-preset-es2015": "^6.22.0",
+    "babel-register": "^6.22.0",
+    "css-loader": "^0.26.1",
+    "json-loader": "^0.5.4",
+    "style-loader": "^0.13.1",
+    "truffle-contract": "^1.1.11",
+    "web3": "^0.20.0"
+  },
+  "dependencies": {
+    "arg": "^4.1.3",
+    "body-parser": "^1.18.2",
+    "chalk": "^4.0.0",
+    "child_process": "^1.0.2",
+    "esm": "^3.2.25",
+    "express": "^4.16.2",
+    "gpg": "^0.6.0",
+    "gpg-parsekeys": "^1.1.0",
+    "inquirer": "^7.1.0",
+    "ipfs": "^0.45.0",
+    "jquery": "^3.3.1",
+    "lodash": "^4.17.15",
+    "nodemon": "^1.14.12",
+    "openpgp": "^4.10.4"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "contracts/"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "directories": {
+    "test": "test"
+  },
+  "keywords": [
+    "trust"
+  ]
+}
