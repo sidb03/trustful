@@ -1,6 +1,6 @@
 {
   "name": "@sidb03/trustful",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "A Decentralized PKI",
   "main": "src/cli.js",
   "bin": {

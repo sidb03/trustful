@@ -5,6 +5,11 @@ import IPFSClient from "../util/IPFSClient";
 const IPFS = require('ipfs');
 import chalk from 'chalk';
 const Web3 = require('web3');
+const contract = require('truffle-contract');
+const {promisify} = require('../util/promisify');
+const successStyle = chalk.bold.italic.green;
+const printStyle = chalk.yellow;
+const errorStyle = chalk.bold.red;
 // import { createProject } from './main';
 
 function parseArgumentsIntoOptions(rawArgs) {
@@ -21,7 +26,8 @@ function parseArgumentsIntoOptions(rawArgs) {
             '--searchTerm': String,
             '--expiry': Number,
             '--signatureID': Number,
-            '--address': String
+            '--address': String,
+            "--ethereumPort": Number,
         },
         {
             argv: rawArgs.slice(2),
@@ -40,19 +46,23 @@ function parseArgumentsIntoOptions(rawArgs) {
         expiry: args['--expiry'] || null,
         signatureID: args['--signatureID'] || null,
         address: args['--address'] || null,
+        ethereumPort: args['--ethereumPort'] || 8545,
         command: args._[0],
     };
 }
 
-async function promptForMissingOptions(options) {
+async function promptForMissingOptions(options, EthereumAccounts) {
     const defaultCommand = 'add';
-    // if (options.skipPrompts) {
-    //     return {
-    //         ...options,
-    //         template: options.template || defaultTemplate,
-    //     };
-    // }
-    const questions = [];
+    if(EthereumAccounts.length > 0) {
+        var {selectedAccount} = await inquirer.prompt({
+            type: 'list',
+            name: 'selectedAccount',
+            message: 'Please seclect Ethereum Account:',
+            choices: EthereumAccounts,
+            default: EthereumAccounts[0]
+        })
+    }
+
     if (!options.command) {
         const answer = await inquirer.prompt({
             type: 'list',
@@ -100,17 +110,19 @@ async function promptForMissingOptions(options) {
                 }])
             }
             Object.assign(options, answers);
-            console.log("Add Selected", options.attributeType, options.identifier, options.data, options.command);
+            // console.log("Add Selected", options.attributeType, options.identifier, options.data, options.command);
             var result;
+            console.log("Selected account", selectedAccount);
             try {
                 if (options.command == 'add')
-                    result = await Trustful.addAttribute(options.attributeType, false, options.identifier, options.data, '');
+                    result = await Trustful.addAttribute(options.attributeType, false, options.identifier, options.data, '', selectedAccount);
                 else
-                    result = await Trustful.addAttributeOverIPFS(options.attributeType, false, options.identifier, options.data, '');
-                console.log("Attribute Added Successfully!", result);
+                    result = await Trustful.addAttributeOverIPFS(options.attributeType, false, options.identifier, options.data, '', selectedAccount);
+
+                console.log(successStyle("Attribute Added Successfully!"),'\n', result);
             }
             catch (err) {
-                console.err("Add Attribute failed", err);
+                console.error(errorStyle("Add Attribute failed"), '\n', err);
             }
             break;
         case 'ipfsAddPGP':
@@ -135,12 +147,12 @@ async function promptForMissingOptions(options) {
                 }])
             }
             Object.assign(options, answers);
-            console.log("ipfsAddPGP Selected", options.userName, options.email, options.passphrase)
+            // console.log("ipfsAddPGP Selected", options.userName, options.email, options.passphrase)
             try {
-                var result = await Trustful.addPGPAttributeOverIPFS(options.userName, options.email, options.passphrase);
-                console.log("Added PGP Key Successfully!", result);
+                var result = await Trustful.addPGPAttributeOverIPFS(options.userName, options.email, options.passphrase, selectedAccount);
+                console.log(successStyle("Added PGP Key Successfully!"), '\n', result);
             } catch (err) {
-                console.error("PGP add attribute failed", err);
+                console.error(errorStyle("PGP add attribute failed"), '\n', err);
             }
             break;
         case 'retrieve':
@@ -153,12 +165,12 @@ async function promptForMissingOptions(options) {
                 }])
             }
             Object.assign(options, answers);
-            console.log("retrieve Selected", options.attributeID);
+            // console.log("retrieve Selected", options.attributeID);
             try {
                 var result = await Trustful.retrieveAttribute(options.attributeID);
-                console.log("Attributes are:", result);
+                console.log(printStyle("Attributes are:"), '\n', result);
             } catch (err) {
-                console.error("Retrieve attribute failed", err);
+                console.error(errorStyle("Retrieve attribute failed"), '\n', err);
             }
             break;
         case 'search':
@@ -179,7 +191,7 @@ async function promptForMissingOptions(options) {
                 )
             }
             Object.assign(options, answers);
-            console.log("search Selected", options.searchBy, options.searchTerm);
+            // console.log("search Selected", options.searchBy, options.searchTerm);
             try {
                 var result;
                 if (options.searchBy == 'attributeType') {
@@ -188,9 +200,9 @@ async function promptForMissingOptions(options) {
                 else if (options.searchBy == 'attributeIdentifier') {
                     result = await Trustful.searchAttributes(null, options.searchTerm);
                 }
-                console.log("Searched Attributes:", result);
+                console.log(printStyle("Searched Attributes:"), '\n', result);
             } catch (err) {
-                console.error("Search attribute failed", err);
+                console.error(errorStyle("Search attribute failed"), '\n', err);
             }
             break;
         case 'sign':
@@ -210,13 +222,13 @@ async function promptForMissingOptions(options) {
                 )
             }
             Object.assign(options, answers);
-            console.log("sign Selected", options.attributeID, options.expiry);
+            // console.log("sign Selected", options.attributeID, options.expiry);
             try {
                 var expiryTime = Math.floor((new Date()).getTime() / 1000) + Number(options.expiry) * 60 * 60 * 24;
-                var result = await Trustful.signAttribute(options.attributeID, expiryTime);
-                console.log("Sign Successful:", result);
+                var result = await Trustful.signAttribute(options.attributeID, expiryTime, selectedAccount);
+                console.log(successStyle("Sign Successful:"), '\n', result);
             } catch (err) {
-                console.error("Sign attribute failed", err);
+                console.error(errorStyle("Sign attribute failed"), '\n', err);
             }
             break;
         case 'revoke':
@@ -230,12 +242,12 @@ async function promptForMissingOptions(options) {
                 )
             }
             Object.assign(options, answers);
-            console.log("sign Selected", options.signatureID);
+            // console.log("sign Selected", options.signatureID);
             try {
-                var result = await Trustful.revokeSignature(options.signatureID);
-                console.log("Sign Revoke Successful:", result);
+                var result = await Trustful.revokeSignature(options.signatureID, selectedAccount);
+                console.log(successStyle("Sign Revoke Successful:"), '\n', result);
             } catch (err) {
-                console.error("Revoke Sign attribute failed", err);
+                console.error(errorStyle("Revoke Sign attribute failed"), '\n', err);
             }
             break;
         case 'trust':
@@ -249,12 +261,12 @@ async function promptForMissingOptions(options) {
                 )
             }
             Object.assign(options, answers);
-            console.log("Trust Selected", options.address);
+            // console.log("Trust Selected", options.address);
             try {
                 var result = await Trustful.trustAddress(options.address);
-                console.log("Add Trusted Address Successful");
+                console.log(successStyle("Add Trusted Address Successful"));
             } catch (err) {
-                console.error("Add Trusted Address failed", err);
+                console.error(errorStyle("Add Trusted Address failed"),'\n', err);
             }
             break;
         case 'untrust':
@@ -268,21 +280,21 @@ async function promptForMissingOptions(options) {
                 )
             }
             Object.assign(options, answers);
-            console.log("Trust Selected", options.address);
+            // console.log("Trust Selected", options.address);
             try {
                 var result = await Trustful.unTrustAddress(options.address);
-                console.log("Remove Trusted Address Successful:");
+                console.log(successStyle("Remove Trusted Address Successful:"));
             } catch (err) {
-                console.error("Remove Trusted Address failed", err);
+                console.error(errorStyle("Remove Trusted Address failed", err));
             }
             break;
         case 'trusted':
-            console.log("Trusted Selected");
+            // console.log("Trusted Selected");
             try {
                 var result = await Trustful.getTrusted();
-                console.log("Trusted Addresses:", result);
+                console.log(printStyle("Trusted Addresses:", result));
             } catch (err) {
-                console.error("Get Trusted Addresses failed", err);
+                console.error(errorStyle("Get Trusted Addresses failed", err));
             }
             break;
         case 'quit':
@@ -293,16 +305,38 @@ async function promptForMissingOptions(options) {
     return false;
 }
 
-export async function cli(args) {
-    Trustful.web3 = new Web3(new Web3.providers.HttpProvider("http://127.0.0.1:8545"));
-    Trustful.IPFSClient = await IPFS.create({silent: true});
-    let options = parseArgumentsIntoOptions(args);
-    let quitCommand = false;
-    while(!quitCommand) {
-        quitCommand = await promptForMissingOptions(options);
-        options = {}
+const checkIfContractDeployed = async function() {
+    try {
+        const trustful_artifact = require('../build/contracts/Trustful.json');
+        var TrustfulContract = contract(trustful_artifact);
+        TrustfulContract.setProvider(Trustful.web3.currentProvider);
+        var TrustfulInstance = await TrustfulContract.deployed();
+        var accounts = await promisify(cb => Trustful.web3.eth.getAccounts(cb));
+        if(accounts.length <= 0) 
+            throw new Error('No accounts found')
+        return accounts;
     }
-    process.exit();
+    catch (err) {
+        console.error(errorStyle('Ethereum Setup Error:', err));
+    }
+    
 }
 
-// ...
+export async function cli(args) {
+    try {
+        let options = parseArgumentsIntoOptions(args);
+        Trustful.web3 = new Web3(new Web3.providers.HttpProvider("http://127.0.0.1:" + options.ethereumPort));
+        const accounts = await checkIfContractDeployed();
+        Trustful.IPFSClient = await IPFS.create({ silent: true });
+        let quitCommand = false;
+        while (!quitCommand) {
+            quitCommand = await promptForMissingOptions(options, accounts);
+            options = {}
+        }
+        Trustful.IPFSClient.stop();
+        process.exit();
+    }
+    catch (err) {
+        console.error(errorStyle("Error:", err))
+    }
+}

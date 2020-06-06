@@ -1,5 +1,4 @@
 const contract = require('truffle-contract');
-const userConfig = require('../userConfig.json')
 const trustful_artifact = require('../build/contracts/Trustful.json');
 const fs = require("fs");
 var Trustful = contract(trustful_artifact);
@@ -19,9 +18,7 @@ const promisify = (inner) =>
 
 const init = async function () {
     var self = this;
-    
     Trustful.setProvider(self.web3.currentProvider);
-
     try {
         var accounts = await promisify(cb => self.web3.eth.getAccounts(cb));
         if (accounts.length == 0) {
@@ -44,22 +41,11 @@ const init = async function () {
     }
 }
 
-
-const testFunction = async function (int) {
-    var self = this;
-    self.init(async function(accounts,TrustfulInstance) {
-        var result = await TrustfulInstance.testFunction(int, {from: accounts[1]});
-        console.log(result);
-        return result;
-    })
-}
-
-const addAttribute = async function (attributetype, has_proof, identifier, data, datahash, self = this, fromAddress = null) {
+const addAttribute = async function (attributetype, has_proof, identifier, data, datahash, fromAddress, self = this) {
     var {accounts, TrustfulInstance} = await self.init();
         try{
+            // console.log("Given Account", fromAddress );
             var result = await TrustfulInstance.addAttribute(attributetype, has_proof, identifier, data, datahash, {from: fromAddress ? fromAddress : self.fromAddress, gas:3000000});
-
-            console.log("Add Attribute Success", result);
             return {
                 attributeID: result.logs[0].args.attributeID.toString(),
                 owner: result.logs[0].args.owner,
@@ -76,7 +62,7 @@ const signAttribute = async function (attributeID, expiry, fromAddress = null) {
     var { accounts, TrustfulInstance } = await self.init();
         try{
             var result = await TrustfulInstance.signAttribute(attributeID, expiry, {from: fromAddress ? fromAddress : self.fromAddress, gas:3000000});
-            console.log("Sign Attribute Success", );
+            // console.log("Sign Attribute Success", );
             return {
                 signatureID: result.logs[0].args.signatureID.toString(),
                 signer: result.logs[0].args.signer,
@@ -108,7 +94,7 @@ const revokeSignature = async function (signatureID, fromAddress = null) {
         }
 }
 
-const retrieveAttribute = async function (attributeID, TrustfulInstance = null, IPFSClient = null) {
+const retrieveAttribute = async function (attributeID, fromAddress, TrustfulInstance = null, IPFSClient = null) {
     if (!TrustfulInstance) {
         var self = this;
         var { accounts, TrustfulInstance } = await self.init();
@@ -129,22 +115,24 @@ const retrieveAttribute = async function (attributeID, TrustfulInstance = null, 
                 identifier: attributeProperties[3],
                 data: attributeProperties[4],
                 datahash: attributeProperties[5],
-                proofValid: null
+                isOwnerTrusted: await isTrustedAddress(attribute.owner)
             }
             if(attribute.data.startsWith('ipfs-block://')) {
                 // console.log("IPFSLCIEN", IPFSClient);
                 var ipfsData = await IPFSClientInteract.getIPFSBlock(attribute.data.replace('ipfs-block://', ''), IPFSClient)
-                console.log("GOT IPFS", ipfsData);
+                // console.log("GOT IPFS", ipfsData);
                 attribute.ipfsAddress = attribute.data;
                 attribute.data = ipfsData;
                 if(attribute.attributeType == 'pgp-key') {
                     var valid = await verifyPGPAttribute(ipfsData, attribute.identifier)
-                    console.log("Validity check", valid);
+                    // console.log("Validity check", valid);
                     attribute.proofValid = valid;
                 }
             }
+            if(attribute.hasProof && !attribute.hasOwnProperty('proofValid'))
+                attribute.proofValid = null
+
             attribute.signatures = await getAttributeSignatureStatus(attributeID, TrustfulInstance);
-            attribute.isOwnerTrusted = await isTrustedAddress(attribute.owner);
             // console.log("Attribute is", attribute)
             return attribute;
         }
@@ -209,21 +197,47 @@ const searchAttributes = async function (type = null, identifier = null) {
             else if(identifier) {
                 attributes = await getAttributesByIdentifier(accounts,TrustfulInstance, identifier, self.IPFSClient);
             }
-            console.log("HERE", attributes)
+            // console.log("HERE", attributes)
             return attributes;
         }
         catch(err) {
             console.error("Search Attrbutes failed", err.stack);
         }
 }
+const getConfigFile = async function() {
+    const homedir = require('os').homedir();
+    // const userConfig;
+    try {
+        const rawData = await fs.readFileSync(require("path").join(homedir, 'trsuteryStore.json'), 'utf8' , 'w');
+        if(rawData) {
+            // console.log(JSON.parse(rawData));
+            return JSON.parse(rawData)
+        }
+        return null;
+    }
+    catch(err) {
+        console.error(err);
+    }
+}
+const writeConfigFile = async function (userConfig) {
+    const homedir = require('os').homedir();
+    try {
+        fs.writeFileSync(require("path").join(homedir, 'trsuteryStore.json'), JSON.stringify(userConfig));
+    }
+    catch (err) {
+        console.error(err);
+    }
+}
+// const writeToConfigFile = async function
 const trustAddress = async function(address) {
-    // var userConfig = JSON.parse(userConfigJSON);
+    var userConfig = await getConfigFile();
     try{
-        if(!userConfig.trustStore) {
+        if(!userConfig || !userConfig.trustStore) {
+            userConfig = {}
             userConfig.trustStore = {};
         }
         userConfig.trustStore[address] = true;
-        fs.writeFile('userConfig.json', JSON.stringify(userConfig), (err, data) => console.error(err, data));
+        await writeConfigFile(userConfig);
         return;
     }
     catch(Err) {
@@ -232,52 +246,60 @@ const trustAddress = async function(address) {
     }
 }
 const unTrustAddress = async function(address) {
-    // var userConfig = JSON.parse(userConfigJSON);
+    var userConfig = await getConfigFile();
     try {
-    if(!userConfig.trustStore) {
-        userConfig.trustStore = {};
-    }
+        if (!userConfig || !userConfig.trustStore) {
+            userConfig = {}
+            userConfig.trustStore = {};
+        }
     if(userConfig.trustStore[address]) {
         delete userConfig.trustStore[address]
     }
-    fs.writeFile('userConfig.json', JSON.stringify(userConfig), (err, data) => console.error(err, data));    
+        await writeConfigFile(userConfig);
     } catch (error) {
         console.error("Error Removing trusted Address",  error);
         throw error;
     }
 }
 const isTrustedAddress = async function(address) {
-    // var userConfig = JSON.parse(userConfigJSON);
+    var userConfig = await getConfigFile();
+    if (!userConfig || !userConfig.trustStore) {
+        userConfig = {}
+        userConfig.trustStore = {};
+    }
     if(userConfig.trustStore) {
         return (userConfig.trustStore.hasOwnProperty(address)) && userConfig.trustStore[address]
     }
 }
 const getTrusted = async function() {
-    // var userConfig = JSON.parse(userConfigJSON);
+    var userConfig = await getConfigFile();
+    if (!userConfig || !userConfig.trustStore) {
+        userConfig = {}
+        userConfig.trustStore = {};
+    }
     if(userConfig.trustStore) {
         return Object.keys(userConfig.trustStore)
     }
 }
-const addAttributeOverIPFS = async function (attributetype, has_proof, identifier, data, datahash, self = this) {
-    // var self = this;
+const addAttributeOverIPFS = async function (attributetype, has_proof, identifier, data, datahash, fromAccount = null, self = this) {
     var ipfsKey = await IPFSClientInteract.setIPFSBlock(data, self.IPFSClient);
 
     var ipfsUri = 'ipfs-block://' + ipfsKey
-    console.log("Added to IPFS", ipfsUri);
-    var result = await addAttribute(attributetype, has_proof, identifier, ipfsUri, '', self);
+    // console.log("Added to IPFS", ipfsUri);
+    var result = await addAttribute(attributetype, has_proof, identifier, ipfsUri, '', fromAccount, self);
     return {
         ...result,
         ipfsAddress: ipfsUri
     }
 }
-const addPGPAttributeOverIPFS = async function (userName, userEmail, passphrase) {
+const addPGPAttributeOverIPFS = async function (userName, userEmail, passphrase, fromAccount) {
     var self = this;
     var { accounts, TrustfulInstance } = await self.init();
         try{
             const { data} = await generatePGPAttributeData(userName, userEmail, passphrase, self.fromAddress);
-            console.log("GPG Succeeded", data);
-            var result = await addAttributeOverIPFS('pgp-key', true, userEmail ,data, '', self)
-            console.log("IPFS ADD ", result);
+            // console.log("GPG Succeeded", data);
+            var result = await addAttributeOverIPFS('pgp-key', true, userEmail ,data, '', fromAccount, self)
+            // console.log("IPFS ADD ", result);
             return {
                 ...result,
                 dataHash: data
@@ -297,7 +319,7 @@ const getAttributeSignatureStatus = async function(attributeID, TrustfulInstance
                 if(revocations.includes(signatureId)) {
                     signature.status = 'revoked';
                 }
-                else if(Math.floor((new Date()).getTime() / 1000) > Number(signature.expiry)) {
+                else if(Math.floor((new Date()).getTime() / 1000) > signature.expiry.getTime()) {
                     signature.status = 'expired';
                 }
                 else {
@@ -345,13 +367,12 @@ const getSignatureById = async function(TrustfulInstance, signatureID) {
         }
         var signature = {
             signer: signatureProperties[0],
-            expiry: signatureProperties[1]
+            expiry: new Date(Number(signatureProperties[1]) * 1000)
         }
         return signature;
 }
 
  module.exports = {
-    testFunction,
     init,
     addAttribute,
     signAttribute,
