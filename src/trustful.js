@@ -94,7 +94,7 @@ const revokeSignature = async function (signatureID, fromAddress = null) {
         }
 }
 
-const retrieveAttribute = async function (attributeID, fromAddress, TrustfulInstance = null, IPFSClient = null) {
+const retrieveAttribute = async function (attributeID, TrustfulInstance = null, IPFSClient = null) {
     if (!TrustfulInstance) {
         var self = this;
         var { accounts, TrustfulInstance } = await self.init();
@@ -115,7 +115,7 @@ const retrieveAttribute = async function (attributeID, fromAddress, TrustfulInst
                 identifier: attributeProperties[3],
                 data: attributeProperties[4],
                 datahash: attributeProperties[5],
-                isOwnerTrusted: await isTrustedAddress(attribute.owner)
+                isOwnerTrusted: await isTrustedAddress(attributeProperties[0])
             }
             if(attribute.data.startsWith('ipfs-block://')) {
                 // console.log("IPFSLCIEN", IPFSClient);
@@ -137,7 +137,7 @@ const retrieveAttribute = async function (attributeID, fromAddress, TrustfulInst
             return attribute;
         }
         catch(err) {
-            console.error("Retrieve Attribute by ID failed", JSON.stringify(err));
+            console.error("Retrieve Attribute by ID failed", err);
         }
 }
 function hexToString (hex) {
@@ -337,25 +337,19 @@ const getAttributeSignatureStatus = async function(attributeID, TrustfulInstance
 }
 
 const getAllRevocations = async function(TrustfulInstance) {
-    // console.log("FOUnd", self.TrustfulInstance);
     var result = await TrustfulInstance.getAllRevocations();
-    // console.log("RRVO REsult", result);
     var revocations = [];
      for(var i=0;i<result.length;i++){
         revocations.push(result[i].toString());
     }
-    // console.log("Revocations", revocations);
     return revocations;
 }
 const getAllSignaturesForAttribute = async function(TrustfulInstance, attributeID) {
-    // console.log("SElf", attributeID, self.TrustfulInstance);
-    // console.log(TrustfulInstance.getSignaturesOfAttribute, attributeID);
     var result = await TrustfulInstance.getSignaturesOfAttribute(attributeID);
     var signatureIDs = [];
      for(var i=0;i<result.length;i++){
         signatureIDs.push(result[i].toString());
     }
-    // console.log("signatureIDs:", signatureIDs);
     return signatureIDs;
 }
 const getSignatureById = async function(TrustfulInstance, signatureID) {
