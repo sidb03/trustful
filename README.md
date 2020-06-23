@@ -3,7 +3,7 @@
 # trustful
 **Decentralized PKI and Identity Management System on Ethereum Blockchain**
 
-**[Project Demo]**(https://www.loom.com/share/cd842575a4d444579e49ab8e7c288092)
+[Project Demo](https://www.loom.com/share/cd842575a4d444579e49ab8e7c288092)
 
 *Note - This is an experimental prototype and should not be used in production*
 
